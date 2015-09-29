@@ -154,7 +154,7 @@ static void CpuProfilerSwitch(int signal_number)
         	return;
     	}
 	}
-    if (!started) 
+    if (!started)
     {
     	char full_profile_name[1024];
 
@@ -167,7 +167,7 @@ static void CpuProfilerSwitch(int signal_number)
                     full_profile_name, strerror(errno));
         }
     }
-    else    
+    else
     {
         ProfilerStop();
     }
@@ -360,7 +360,7 @@ void CpuProfiler::prof_handler(int sig, siginfo_t*, void* signal_ucontext,
                                          3, signal_ucontext);
 
     void **used_stack;
-    if (stack[1] == stack[0]) {
+    if (depth > 0 && stack[1] == stack[0]) {
       // in case of non-frame-pointer-based unwinding we will get
       // duplicate of PC in stack[1], which we don't want
       used_stack = stack + 1;
