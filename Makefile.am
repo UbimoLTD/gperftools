@@ -48,6 +48,9 @@ endif GCC
 if HAVE_W_NO_UNUSED_RESULT
 AM_CXXFLAGS += -Wno-unused-result
 endif HAVE_W_NO_UNUSED_RESULT
+if HAVE_SIZED_DEALLOCATION
+AM_CXXFLAGS += -fsized-deallocation
+endif HAVE_SIZED_DEALLOCATION
 
 # The -no-undefined flag allows libtool to generate shared libraries for
 # Cygwin and MinGW.  LIBSTDCXX_LA_LINKER_FLAG is used to fix a Solaris bug.
@@ -133,7 +136,6 @@ googleinclude_HEADERS =				\
    src/google/stacktrace.h			\
    src/google/tcmalloc.h
 
-docdir = $(prefix)/share/doc/$(PACKAGE)-$(VERSION)
 # This is for HTML and other documentation you want to install.
 # Add your documentation files (in doc/) in addition to these
 # top-level boilerplate files.  Also add a TODO file if you have one.
@@ -196,7 +198,6 @@ SYSINFO_INCLUDES = src/base/sysinfo.h \
                    src/getenv_safe.h \
                    src/base/logging.h \
                    src/base/commandlineflags.h \
-                   src/base/cycleclock.h \
                    src/base/arm_instruction_set_select.h \
                    src/base/basictypes.h
 noinst_LTLIBRARIES += libsysinfo.la
@@ -239,7 +240,6 @@ SPINLOCK_INCLUDES = src/base/spinlock.h \
                     src/base/spinlock_win32-inl.h \
                     src/base/spinlock_linux-inl.h \
                     src/base/spinlock_posix-inl.h \
-                    src/base/synchronization_profiling.h \
                     src/base/atomicops-internals-macosx.h \
                     src/base/atomicops-internals-linuxppc.h \
                     src/base/atomicops-internals-arm-generic.h \
@@ -482,10 +482,10 @@ libtcmalloc_minimal_internal_la_SOURCES = src/common.cc \
 # We #define NO_TCMALLOC_SAMPLES, since sampling is turned off for _minimal.
 libtcmalloc_minimal_internal_la_CXXFLAGS = -DNO_TCMALLOC_SAMPLES \
                                            -DNO_HEAP_CHECK \
-                                           $(PTHREAD_CFLAGS) -DNDEBUG \
+                                           -DNDEBUG \
                                            $(AM_CXXFLAGS) $(NO_EXCEPTIONS)
-libtcmalloc_minimal_internal_la_LDFLAGS = $(PTHREAD_CFLAGS) $(AM_LDFLAGS)
-libtcmalloc_minimal_internal_la_LIBADD = $(PTHREAD_LIBS) $(LIBSPINLOCK) libmaybe_threads.la
+libtcmalloc_minimal_internal_la_LDFLAGS =  $(AM_LDFLAGS)
+libtcmalloc_minimal_internal_la_LIBADD =  $(LIBSPINLOCK) libmaybe_threads.la
 
 lib_LTLIBRARIES += libtcmalloc_minimal.la
 WINDOWS_PROJECTS += vsprojects/libtcmalloc_minimal/libtcmalloc_minimal.vcproj
@@ -493,8 +493,8 @@ libtcmalloc_minimal_la_SOURCES = $(TCMALLOC_CC) $(TCMALLOC_MINIMAL_INCLUDES)
 libtcmalloc_minimal_la_CXXFLAGS = -DNO_TCMALLOC_SAMPLES \
                                   $(PTHREAD_CFLAGS) -DNDEBUG $(AM_CXXFLAGS)
 # -version-info gets passed to libtool
-libtcmalloc_minimal_la_LDFLAGS = $(PTHREAD_CFLAGS) -version-info @TCMALLOC_SO_VERSION@ $(AM_LDFLAGS)
-libtcmalloc_minimal_la_LIBADD = libtcmalloc_minimal_internal.la $(PTHREAD_LIBS)
+libtcmalloc_minimal_la_LDFLAGS = -version-info @TCMALLOC_SO_VERSION@ $(AM_LDFLAGS)
+libtcmalloc_minimal_la_LIBADD = libtcmalloc_minimal_internal.la
 
 # For windows, we're playing around with trying to do some stacktrace
 # support even with libtcmalloc_minimal.  For everyone else, though,
@@ -847,18 +847,40 @@ endif WITH_STACK_TRACE
 
 endif WITH_DEBUGALLOC
 
-noinst_PROGRAMS += malloc_bench malloc_bench_shared
+if !MINGW
+noinst_LTLIBRARIES += librun_benchmark.la
+librun_benchmark_la_SOURCES = \
+	benchmark/run_benchmark.c benchmark/run_benchmark.h
+
+noinst_PROGRAMS += malloc_bench malloc_bench_shared \
+	malloc_bench_shared_full \
+	binary_trees binary_trees_shared
 
 malloc_bench_SOURCES = benchmark/malloc_bench.cc
 malloc_bench_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
 malloc_bench_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS) -static
-malloc_bench_LDADD = libtcmalloc_minimal.la $(PTHREAD_LIBS)
+malloc_bench_LDADD = librun_benchmark.la libtcmalloc_minimal.la $(PTHREAD_LIBS)
 
 malloc_bench_shared_SOURCES = benchmark/malloc_bench.cc
 malloc_bench_shared_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
 malloc_bench_shared_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS)
-malloc_bench_shared_LDADD = libtcmalloc_minimal.la $(PTHREAD_LIBS)
+malloc_bench_shared_LDADD = librun_benchmark.la libtcmalloc_minimal.la $(PTHREAD_LIBS)
 
+malloc_bench_shared_full_SOURCES = benchmark/malloc_bench.cc
+malloc_bench_shared_full_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
+malloc_bench_shared_full_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS)
+malloc_bench_shared_full_LDADD = librun_benchmark.la libtcmalloc.la $(PTHREAD_LIBS)
+
+binary_trees_SOURCES = benchmark/binary_trees.cc
+binary_trees_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
+binary_trees_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS) -static
+binary_trees_LDADD = libtcmalloc_minimal.la $(PTHREAD_LIBS)
+
+binary_trees_shared_SOURCES = benchmark/binary_trees.cc
+binary_trees_shared_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
+binary_trees_shared_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS)
+binary_trees_shared_LDADD = libtcmalloc_minimal.la $(PTHREAD_LIBS)
+endif !MINGW
 
 ### ------- tcmalloc (thread-caching malloc + heap profiler + heap checker)
 

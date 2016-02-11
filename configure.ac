@@ -51,6 +51,13 @@ case "$host" in
    *-darwin*) default_enable_heap_checker=no;;
 esac
 
+# Currently only backtrace works on s390x.
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [return __s390x__])],
+                  [default_enable_libunwind=no
+                   default_enable_backtrace=yes],
+                  [default_enable_libunwind=yes
+                   default_enable_backtrace=no])
+
 # Disable libunwind linking on ppc64 by default.
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [return __PPC64__])],
                   [default_enable_libunwind=no
@@ -92,7 +99,7 @@ AC_ARG_ENABLE([stacktrace-via-backtrace],
               [AS_HELP_STRING([--enable-stacktrace-via-backtrace],
                               [enable use of backtrace() for stacktrace capturing (may deadlock)])],
               [enable_backtrace=yes],
-              [])
+              [enable_backtrace="$default_enable_backtrace"])
 AC_ARG_ENABLE([libunwind],
               [AS_HELP_STRING([--enable-libunwind],
                               [enable libunwind linking])],
@@ -306,17 +313,72 @@ AM_CONDITIONAL(I386, test "$is_i386" = yes)
 AC_CACHE_CHECK([if the compiler supports -Wno-unused-result],
                perftools_cv_w_no_unused_result,
 	       [OLD_CFLAGS="$CFLAGS"
-	        CFLAGS="$CFLAGS -Wno-error -Wno-unused-result"
+	        CFLAGS="$CFLAGS -Wno-error -Wunused-result"
 		# gcc doesn't warn about unknown flags unless it's
 		# also warning for some other purpose, hence the
 		# divide-by-0.  (We use -Wno-error to make sure the
 		# divide-by-0 doesn't cause this test to fail!)
+                #
+                # Also gcc is giving only warning for unknown flags of
+                # -Wno-XXX form. So in order to detect support we're
+                # using -Wunused-result which will cause gcc to give
+                # error which we can detect.
 	        AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, return 1/0)],
 	                          perftools_cv_w_no_unused_result=yes,
                                   perftools_cv_w_no_unused_result=no)
 	        CFLAGS="$OLD_CFLAGS"])
 AM_CONDITIONAL(HAVE_W_NO_UNUSED_RESULT,
 	       test "$perftools_cv_w_no_unused_result" = yes)
+
+AC_ARG_ENABLE([dynamic-sized-delete-support],
+              [AS_HELP_STRING([--disable-dynamic-sized-delete-support],
+                [don't try to build run-time switch for sized delete operator])],
+              [enable_dyn_sized_delete="$enableval"],
+              [enable_dyn_sized_delete=default])
+
+AS_IF([test "x$enable_dyn_sized_delete" = xdefault],
+      [AC_CACHE_CHECK(
+        [if the compiler supports ifunc attributes for target],
+        [perftools_cv_ifunc_result],
+        [AC_COMPILE_IFELSE(
+                 [AC_LANG_PROGRAM([
+                   void *resolve_foo() {return 0;}
+                   void foo() __attribute__((ifunc("resolve_foo")));
+                 ],[foo();])],
+                 [perftools_cv_ifunc_result=yes],
+                 [perftools_cv_ifunc_result=no])])]
+      [enable_dyn_sized_delete=$perftools_cv_ifunc_result])
+
+AS_IF([test "x$enable_dyn_sized_delete" = xyes],
+      [AC_DEFINE([ENABLE_DYNAMIC_SIZED_DELETE], 1,
+                 [Build runtime detection for sized delete])])
+
+AC_ARG_ENABLE([sized-delete],
+              [AS_HELP_STRING([--enable-sized-delete],
+                              [build sized delete operator])],
+              [enable_sized_delete="$enableval"],
+              [enable_sized_delete="no"])
+AS_IF([test "x$enable_sized_delete" = xyes],
+        [AC_DEFINE([ENABLE_SIZED_DELETE], 1, [Build sized deletion operators])
+         AC_MSG_NOTICE([Will build sized deallocation operators])],
+      [AS_IF([test "x$enable_dyn_sized_delete" = xyes],
+             [AC_MSG_NOTICE([Will build dynamically detected sized deallocation operators])],
+             [AC_MSG_NOTICE([Will not build sized deallocation operators])])])
+
+AS_IF([test "x$enable_sized_delete" = xyes -o "x$enable_dyn_sized_delete" = xyes],
+      [AC_CACHE_CHECK([if C++ compiler supports -fsized-deallocation],
+                      perftools_cv_sized_deallocation_result,
+                      [AC_LANG_PUSH(C++)
+                       OLD_CXXFLAGS="$CXXFLAGS"
+                       CXXFLAGS="$CXXFLAGS -fsized-deallocation"
+                       AC_COMPILE_IFELSE([AC_LANG_PROGRAM(,)],
+                                         perftools_cv_sized_deallocation_result=yes,
+                                         perftools_cv_sized_deallocation_result=no)
+                       CXXFLAGS="$OLD_CXXFLAGS"
+                       AC_LANG_POP(C++)])])
+
+AM_CONDITIONAL(HAVE_SIZED_DEALLOCATION,
+               test "$perftools_cv_sized_deallocation_result" = yes)
 
 # Defines PRIuS
 AC_COMPILER_CHARACTERISTICS

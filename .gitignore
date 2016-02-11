@@ -21,6 +21,10 @@
 /autom4te.cache/
 /benchmark/.deps
 /benchmark/.dirstamp
+/binary_trees
+/binary_trees.exe
+/binary_trees_shared
+/binary_trees_shared.exe
 /compile
 /config.guess
 /config.log
@@ -65,6 +69,8 @@
 /malloc_bench.exe
 /malloc_bench_shared
 /malloc_bench_shared.exe
+/malloc_bench_shared_full
+/malloc_bench_shared_full.exe
 /malloc_extension_c_test
 /malloc_extension_debug_test
 /malloc_extension_test
